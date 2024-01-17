@@ -1,14 +1,7 @@
 #include <Arduino.h>
 #include <EEPROM.h>
-#include <ESPAsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <ESP8266WiFi.h> 
-#include <WiFiUdp.h>
-#include <TimeLib.h>
 
-#define LOCAL_SSID "QUE-STARLINK"
-#define LOCAL_PASS "Quefamily01259"
-
+#define SCHEDULE_ADDR 0x00001000
 // configuration variables 
 /*  The configuration variables are the ff:
 - a list of three bytes where the 24 hours per day are represented. The data is 
@@ -27,35 +20,89 @@
   7 % 8 = 7, 7th bit. 0000 0111 & 
   change byte 0, 7th bit to 1. 
       xxxxxxxx
-  or  10000000 (1 << 7)
+  OR  10000000 (1 << 7)
   ------------
   =   1xxxxxxx
 
   if changing a bit to 0, 
       xxxxxxxx
-  and 01111111 (!(1 << 7))
+  AND 01111111 (!(1 << 7))
   ------------
   =   1xxxxxxx
 
-  TLDR: To switch a bit on, use bitwise or with a left shift, to switch a bit off, 
-  use bitwise and with the inverse of a left shift. */
+  Perform modulo 8 by AND of the number and 00000111.
+
+  TLDR: 
+    To get a certain bit, first integer divide the hour by 8 to get the nth
+    byte, bitwise shift right the nth byte by the modulo of the hour and 8, then
+    AND the result with 00000001 to get a 1 or a 0. 
+    To switch a bit on, use bitwise OR with a left shift, to switch a bit off, 
+  use bitwise AND with the inverse of a left shift. 
+  */
+
+typedef struct {
+  byte schedule[3];
+  short duration; 
+} timingconfig;
 
 /*
 list of functions:
-load the schedule variables from the EEPROM
-print the active hours 
-switch on a certain hour in the schedule variables 
-switch off a certain hour in the schedule variables 
-set all hours in the schedule variables to OFF
-save the schedule variables to the EEPROM
-load the ON duration from the EEPROM 
-save the ON duration to the EEPROM
+load the schedule and duration variables from the EEPROM
+save the schedule and duration variables to the EEPROM
+return the active hours in a day
+switch on or off a certain hour in the schedule variables 
+set a new duration time
 */
+void loadFromEEPROM(timingconfig* tC);
+void saveToEEPROM(timingconfig tC);
+bool* getActiveHours(timingconfig tC);
+void setHour(timingconfig* tC, int hour, bool newState); 
 
 void setup() {
   Serial.begin(115200); 
+  // initialize the emulated EEPROM as large as needed
+  EEPROM.begin(sizeof(timingconfig));
+  // test with some predefined settings 
+  timingconfig tC;
+  tC.duration = 20;
+  Serial.print("Duration=");
+  Serial.println(tC.duration);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+}
+
+void loadFromEEPROM(timingconfig* tC) {
+  unsigned int addr = 0;
+  EEPROM.get(addr, *tC);
+}
+
+void saveToEEPROM(timingconfig tC) {
+  unsigned int addr = 0;
+  EEPROM.put(addr, tC);
+  EEPROM.commit();
+}
+
+bool* getActiveHours(timingconfig tC) {
+  static bool hours[24];
+  // reset the hours array
+  for (int i=0;i<24;i++) {
+    hours[i] = 0;
+  }
+  // check each bit in the schedule bytes then load it into the bool hours array 
+  for (int i=0;i<24;i++) {
+    byte byteIndex = i / 8; 
+    byte currByte = tC.schedule[byteIndex]; 
+    byte offset = i % 8; 
+    currByte = currByte >> offset;
+    currByte = currByte & 1; 
+    Serial.println(currByte);
+    hours[i] = (currByte) ? true: false;
+  }
+  return hours;
+}
+
+void setHour(timingconfig tC, int hour, bool newState) {
+
 }
