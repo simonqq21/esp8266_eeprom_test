@@ -56,6 +56,7 @@ set a new duration time
 void printTimingConfig(timingconfig tC);
 void loadFromEEPROM(unsigned int addr, timingconfig* tC);
 void saveToEEPROM(unsigned int addr, timingconfig tC);
+bool checkHour(timingconfig tC, int hour);
 bool* getActiveHours(timingconfig tC);
 void setHour(timingconfig* tC, int hour, bool newState); 
 void clearAllHours(timingconfig* tC); 
@@ -125,17 +126,6 @@ void setup() {
   // expected: 10000001 00100010 01100100 = 129 34 100
   printTimingConfig(tC);
 
-  // print all active hours 
-  Serial.print("Active hours = ");
-  hours = getActiveHours(tC); 
-  for (int h=0;h<24;h++) {
-    Serial.print(hours[h]);
-    if (h < 23) {
-      Serial.print(",");
-    }
-  }
-  Serial.println();
-
   // set 00:00, 09:00, and 21:00 to disabled
   setHour(&tC, 0, 0);
   setHour(&tC, 9, 0);
@@ -154,6 +144,7 @@ void setup() {
   printTimingConfig(tC);
 
   // print all active hours 
+  // 0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0
   Serial.print("Active hours = ");
   hours = getActiveHours(tC); 
   for (int h=0;h<24;h++) {
@@ -191,20 +182,26 @@ void printTimingConfig(timingconfig tC) {
   Serial.println();
 }
 
+bool checkHour(timingconfig tC, int hour) {
+  bool status;
+  byte byteIndex = hour / 8; 
+  byte currByte = tC.schedule[byteIndex]; 
+  byte offset = hour % 8; 
+  currByte = currByte >> offset;
+  currByte = currByte & 1; 
+  status = (currByte) ? true: false;
+  return status;
+}
+
 bool* getActiveHours(timingconfig tC) {
   static bool hours[24];
   // reset the hours array
-  for (int i=0;i<24;i++) {
-    hours[i] = 0;
+  for (int h=0;h<24;h++) {
+    hours[h] = 0;
   }
   // check each bit in the schedule bytes then load it into the bool hours array 
-  for (int i=0;i<24;i++) {
-    byte byteIndex = i / 8; 
-    byte currByte = tC.schedule[byteIndex]; 
-    byte offset = i % 8; 
-    currByte = currByte >> offset;
-    currByte = currByte & 1; 
-    hours[i] = (currByte) ? true: false;
+  for (int h=0;h<24;h++) { 
+    hours[h] = checkHour(tC, h);
   }
   return hours;
 }
