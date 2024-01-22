@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 
-#define SCHEDULE_ADDR 0x00001000
+#define STARTING_ADDR 0x0
 // configuration variables 
 /*  The configuration variables are the ff:
 - a list of three bytes where the 24 hours per day are represented. The data is 
@@ -53,8 +53,9 @@ return the active hours in a day
 switch on or off a certain hour in the schedule variables 
 set a new duration time
 */
-void loadFromEEPROM(timingconfig* tC);
-void saveToEEPROM(timingconfig tC);
+void printTimingConfig(timingconfig tC);
+void loadFromEEPROM(unsigned int addr, timingconfig* tC);
+void saveToEEPROM(unsigned int addr, timingconfig tC);
 bool* getActiveHours(timingconfig tC);
 void setHour(timingconfig* tC, int hour, bool newState); 
 
@@ -63,25 +64,65 @@ void setup() {
   // initialize the emulated EEPROM as large as needed
   EEPROM.begin(sizeof(timingconfig));
   // test with some predefined settings 
+  /*
+  Schedule enabled for 7AM and 7PM and disabled for others
+  10000000 00000000 00001000 (128, 0, 8)
+  Duration = 20 seconds
+  */
   timingconfig tC;
-  tC.duration = 20;
-  Serial.print("Duration=");
-  Serial.println(tC.duration);
+  // load previous timing configuration from EEPROM if it exists
+  loadFromEEPROM(STARTING_ADDR, &tC);
+  Serial.println("previous tC loaded from EEPROM: ");
+  printTimingConfig(tC);
+
+  // create timing configuration
+  tC.duration = 1;
+  tC.schedule[0] = 128;
+  tC.schedule[1] = 0;
+  tC.schedule[2] = 8;
+  Serial.println("tC created: ");
+  printTimingConfig(tC);
+
+  // save timing configuration to EEPROM
+  Serial.println("Saving tC to EEPROM: ");
+  saveToEEPROM(STARTING_ADDR, tC);
+
+  // modify timing configuration in memory
+  tC.duration = 40; 
+  tC.schedule[1] = 16; // enable 12PM 
+  Serial.println("tC modified: ");
+  printTimingConfig(tC);
+
+  // load timing configuration from EEPROM
+  loadFromEEPROM(STARTING_ADDR, &tC);
+  Serial.println("tC reloaded from EEPROM: ");
+  printTimingConfig(tC);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
 }
 
-void loadFromEEPROM(timingconfig* tC) {
-  unsigned int addr = 0;
+void loadFromEEPROM(unsigned int addr, timingconfig* tC) {
   EEPROM.get(addr, *tC);
 }
 
-void saveToEEPROM(timingconfig tC) {
-  unsigned int addr = 0;
+void saveToEEPROM(unsigned int addr, timingconfig tC) {
   EEPROM.put(addr, tC);
   EEPROM.commit();
+}
+
+void printTimingConfig(timingconfig tC) {
+  Serial.print("schedule bytes = ");
+  for (int i=0;i<3;i++) {
+    Serial.print(tC.schedule[i]);  
+    if (i<2)
+      Serial.print(", ");
+    else Serial.print(" ");
+  }
+  Serial.print("duration = ");
+  Serial.print(tC.duration);
+  Serial.println();
 }
 
 bool* getActiveHours(timingconfig tC) {
@@ -104,5 +145,5 @@ bool* getActiveHours(timingconfig tC) {
 }
 
 void setHour(timingconfig tC, int hour, bool newState) {
-
+  int bit = hour / 8;
 }
