@@ -58,6 +58,8 @@ void loadFromEEPROM(unsigned int addr, timingconfig* tC);
 void saveToEEPROM(unsigned int addr, timingconfig tC);
 bool* getActiveHours(timingconfig tC);
 void setHour(timingconfig* tC, int hour, bool newState); 
+void clearAllHours(timingconfig* tC); 
+void setDuration(timingconfig* tC, int newDuration);
 
 void setup() {
   Serial.begin(115200); 
@@ -70,6 +72,9 @@ void setup() {
   Duration = 20 seconds
   */
   timingconfig tC;
+
+  bool* hours;
+
   // load previous timing configuration from EEPROM if it exists
   loadFromEEPROM(STARTING_ADDR, &tC);
   Serial.println("previous tC loaded from EEPROM: ");
@@ -97,6 +102,67 @@ void setup() {
   loadFromEEPROM(STARTING_ADDR, &tC);
   Serial.println("tC reloaded from EEPROM: ");
   printTimingConfig(tC);
+
+  // clear all hours from the timing configuration
+  clearAllHours(&tC);
+  Serial.println("Cleared all hours from schedule. ");
+  printTimingConfig(tC); 
+
+  // set duration of tC to 25
+  setDuration(&tC, 25);
+  Serial.println("Set tC duration to 25 seconds. ");
+  printTimingConfig(tC); 
+
+  // set 00:00, 07:00, 09:00, 13:00, 18:00, 21:00, and 22:00 to enabled
+  setHour(&tC, 0, 1);
+  setHour(&tC, 7, 1);
+  setHour(&tC, 9, 1);
+  setHour(&tC, 13, 1);
+  setHour(&tC, 18, 1);
+  setHour(&tC, 21, 1);
+  setHour(&tC, 22, 1);
+  Serial.println("set 00:00, 07:00, 09:00, 13:00, 18:00, 21:00, and 22:00 to enabled");
+  // expected: 10000001 00100010 01100100 = 129 34 100
+  printTimingConfig(tC);
+
+  // print all active hours 
+  Serial.print("Active hours = ");
+  hours = getActiveHours(tC); 
+  for (int h=0;h<24;h++) {
+    Serial.print(hours[h]);
+    if (h < 23) {
+      Serial.print(",");
+    }
+  }
+  Serial.println();
+
+  // set 00:00, 09:00, and 21:00 to disabled
+  setHour(&tC, 0, 0);
+  setHour(&tC, 9, 0);
+  setHour(&tC, 21, 0);
+  Serial.println("set 00:00, 09:00, and 21:00 to disabled");
+  // expected: 10000000 00100000 01000100 = 128 32 68
+  printTimingConfig(tC);
+
+  // save timing configuration to EEPROM
+  Serial.println("Saving tC to EEPROM: ");
+  saveToEEPROM(STARTING_ADDR, tC); 
+
+  // load timing configuration from EEPROM
+  loadFromEEPROM(STARTING_ADDR, &tC);
+  Serial.println("tC reloaded from EEPROM: ");
+  printTimingConfig(tC);
+
+  // print all active hours 
+  Serial.print("Active hours = ");
+  hours = getActiveHours(tC); 
+  for (int h=0;h<24;h++) {
+    Serial.print(hours[h]);
+    if (h < 23) {
+      Serial.print(",");
+    }
+  }
+  Serial.println();
 }
 
 void loop() {
@@ -138,12 +204,45 @@ bool* getActiveHours(timingconfig tC) {
     byte offset = i % 8; 
     currByte = currByte >> offset;
     currByte = currByte & 1; 
-    Serial.println(currByte);
     hours[i] = (currByte) ? true: false;
   }
   return hours;
 }
 
-void setHour(timingconfig tC, int hour, bool newState) {
-  int bit = hour / 8;
+/* set the hour in the timing configuration to the specified state. 
+args:
+  tC - timingConfig object 
+  hour - hour of the day from 0-24 
+  newState - 0 for disable and 1 for enable 
+*/ 
+void setHour(timingconfig* tC, int hour, bool newState) {
+  int byteIndex = hour / 8;
+  int bitIndex = hour % 8; 
+  int mask = 1 << bitIndex; 
+  Serial.print("mask = ");
+  // if enabling the hour
+  if (newState) {
+    tC->schedule[byteIndex] = tC->schedule[byteIndex] | mask;
+  }
+  // else disabling the hour
+  else {
+    mask = ~mask;
+    tC->schedule[byteIndex] = tC->schedule[byteIndex] & mask;
+  }
+  Serial.println(mask);
 }
+
+// set the duration of the timing configuration 
+void setDuration(timingconfig* tC, int newDuration) {
+  tC->duration = newDuration;
+}
+
+// macro function to clear all hours in the schedule and reset interval to 0
+void clearAllHours(timingconfig* tC) {
+  setDuration(tC, 0);
+  for (int h=0; h<24; h++) {
+    setHour(tC, h, 0);
+  }
+}
+
+
